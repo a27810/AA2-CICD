@@ -31,7 +31,7 @@ jobs:
       id: docker_meta
       uses: docker/metadata-action@v5
       with:
-        images: Aa27810/netflix
+        images: a27810/netflix
         flavor: |
           latest=false
         tags: |
