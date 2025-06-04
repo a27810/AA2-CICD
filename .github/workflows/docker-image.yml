@@ -31,7 +31,7 @@ jobs:
       id: docker_meta
       uses: docker/metadata-action@v5
       with:
-        images: anastasia829/netflix
+        images: a27810/netflix-deployment.yaml
         flavor: |
           latest=false
         tags: |
