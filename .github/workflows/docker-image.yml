@@ -1,4 +1,4 @@
-name: Docker Image CICD.
+flixname: Docker Image CICD.
 
 on:
   push:
@@ -31,7 +31,7 @@ jobs:
       id: docker_meta
       uses: docker/metadata-action@v5
       with:
-        images: Aa27810/AA2-CICD
+        images: Aa27810/netflix
         flavor: |
           latest=false
         tags: |
