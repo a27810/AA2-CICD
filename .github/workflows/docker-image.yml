@@ -1,68 +1,85 @@
-flixname: Docker Image CICD.
+name: Docker Image CICD  # Corregido: antes aparecía "flixname" en lugar de "name"
 
 on:
   push:
     branches: [ "main" ]
   pull_request:
     branches: [ "main" ]
+
 env:
-  EKS_CLUSTER_NAME: demo-cluter
+  EKS_CLUSTER_NAME: demo-cluster        # Fíjate que anteriormente estaba escrito "demo-cluter"
   AWS_REGION: us-east-1
 
 jobs:
-
   build:
-  
     name: Deployment
     runs-on: ubuntu-latest
 
     steps:
+      # 1) Check out del código al principio (necesario para el contexto de Docker)
+      - name: Check out code
+        uses: actions/checkout@v2
 
-    - name: Set up Docker Buildx
-      uses: docker/setup-buildx-action@v3
+      # 2) Configuración de Docker Buildx
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
 
-    - name: Login to Docker Hub
-      uses: docker/login-action@v3
-      with:
-        username: ${{ secrets.DOCKER_USERNAME }}
-        password: ${{ secrets.DOCKER_PASSWORD }}
-        
-    - name: Docker Metadata for Image
-      id: docker_meta
-      uses: docker/metadata-action@v5
-      with:
-        images: a27810/netflix-deployment.yaml
-        flavor: |
-          latest=false
-        tags: |
-          type=raw,value=00
+      # 3) Login a Docker Hub
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
 
-    - name: Build and Push to Docker Hub
-      id: docker_build
-      uses: docker/build-push-action@v5
-      with:
-       push: true
-       tags: ${{ steps.docker_meta.outputs.tags }}
-       labels: ${{ steps.docker_meta.outputs.labels }}
-       cache-from: type=gha
-       cache-to: type=gha,mode=max
-       platforms: linux/amd64
-    
-    - name: Check out code
-      uses: actions/checkout@v2     
-      
-    - name: Configure AWS credentials
-      uses: aws-actions/configure-aws-credentials@v1
-      with:
-        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-        aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
-        aws-region: ${{env.AWS_REGION}}
+      # 4) Metadata para la imagen Docker
+      #    - Aquí estaba mal configurado: la acción espera "repository" (nombre de la imagen) 
+      #      y opcionalmente "tags" o "flavor", no un fichero YAML.
+      #    - He asumido que quieres etiquetar la imagen como "latest" y con un tag fijo "00".
+      - name: Docker Metadata for Image
+        id: docker_meta
+        uses: docker/metadata-action@v5
+        with:
+          repository: a27810/netflix-deployment
+          tags: |
+            type=raw,value=00
+            type=ref,ref=branch,format=lower
+          # El ejemplo anterior genera dos tags: "00" (raw) y el nombre de la branch en minúsculas
 
-    - name: Update kube config
-      run: aws eks update-kubeconfig --name $EKS_CLUSTER_NAME --region $AWS_REGION
+      # 5) Build & Push de la imagen a Docker Hub
+      - name: Build and Push to Docker Hub
+        id: docker_build
+        uses: docker/build-push-action@v5
+        with:
+          context: .                             # Contexto de construcción (por defecto es '.')
+          push: true
+          tags: ${{ steps.docker_meta.outputs.tags }}
+          labels: ${{ steps.docker_meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          platforms: linux/amd64
 
-    - name: Deploy to EKS
-      run: |
-        kubectl apply -f manifests/frontend-car-deployment.yaml
-        kubectl apply -f manifests/frontend-car-service.yaml
+      # 6) Configurar credenciales AWS
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      # 7) Instalar kubectl (no viene preinstalado en ubuntu-latest)
+      - name: Install kubectl
+        run: |
+          curl -LO "https://storage.googleapis.com/kubernetes-release/release/$(curl -s https://storage.googleapis.com/kubernetes-release/release/stable.txt)/bin/linux/amd64/kubectl"
+          chmod +x kubectl
+          sudo mv kubectl /usr/local/bin/
+
+      # 8) Actualizar kubeconfig para EKS
+      - name: Update kube config
+        run: aws eks update-kubeconfig --name $EKS_CLUSTER_NAME --region $AWS_REGION
+
+      # 9) Desplegar los manifiestos en EKS
+      - name: Deploy to EKS
+        run: |
+          kubectl apply -f manifests/frontend-car-deployment.yaml
+          kubectl apply -f manifests/frontend-car-service.yaml
